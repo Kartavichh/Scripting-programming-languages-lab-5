@@ -2,9 +2,10 @@
 
 ## 📌 Описание
 
-Проект представляет собой реализацию лабораторной работы по дисциплине «Скриптовые языки программирования». Разработана простая банковская система с использованием СУБД PostgreSQL и языка Python.
+Проект представляет собой реализацию лабораторной работы по дисциплине «Скриптовые языки программирования». Разработана банковская система с использованием СУБД PostgreSQL и языка Python.
 
 **Предметная область:** Банковская система  
+**Типы связей:** Один к одному (1:1), Один ко многим (1:N), Многие ко многим (N:M)  
 **Технологии:** PostgreSQL, Python, SQLAlchemy, Docker
 
 ---
@@ -64,27 +65,75 @@ docker compose down
 
 ## 📊 Схема базы данных
 
-### Таблицы
+### Таблицы и связи
 
 | Таблица | Описание | Связи |
 |---------|----------|-------|
 | `clients` | Клиенты банка | — |
-| `accounts` | Счета клиентов | 1:N с clients |
-| `transactions` | Транзакции по счетам | 1:N с accounts |
+| `client_profiles` | Профили клиентов | **1:1** с clients |
+| `accounts` | Счета клиентов | **1:N** с clients |
+| `transactions` | Транзакции по счетам | **1:N** с accounts |
+| `categories` | Категории трат | — |
+| `transaction_categories` | Связующая таблица | **N:M** между transactions и categories |
 
 ### ER-диаграмма
 
 ```
-┌─────────────┐       ┌─────────────┐       ┌────────────────┐
-│   clients   │       │   accounts  │       │  transactions  │
-├─────────────┤       ├─────────────┤       ├────────────────┤
-│ id          │───┐   │ id          │───┐   │ id             │
-│ username    │   │   │ client_id   │◄──┘   │ account_id     │◄──┐
-│ email       │   └──►│ account_num │   │   │ amount         │   │
-│ created_at  │       │ balance     │   └──►│ type           │   │
-└─────────────┘       └─────────────┘       │ description    │   │
-                                            └────────────────┘
+┌─────────────────┐
+│    clients      │
+├─────────────────┤
+│ id (PK)         │
+│ username        │
+│ email           │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌────────┐  ┌─────────────┐
+│client_ │  │  accounts   │
+│profiles│  ├─────────────┤
+├────────┤  │ id (PK)     │
+│1:1     │  │ client_id(FK)──┐
+│uselist=│  │ account_num │  │
+│False   │  │ balance     │  │
+└────────┘  └──────┬──────┘  │
+                   │         │
+                   ▼         │
+            ┌─────────────┐  │
+            │transactions │  │
+            ├─────────────┤  │
+            │ id (PK)     │  │
+            │ account_id(FK)─┘
+            │ amount      │
+            │ type        │
+            └──────┬──────┘
+                   │
+                   ▼
+    ┌─────────────────────────┐
+    │  transaction_categories │
+    │  (связующая таблица)    │
+    ├─────────────────────────┤
+    │ transaction_id (FK, PK) │◄──┐
+    │ category_id (FK, PK)    │   │
+    └────────┬────────────────┘   │
+             │                     │
+             ▼                     │
+    ┌─────────────┐               │
+    │  categories │               │
+    ├─────────────┤               │
+    │ id (PK)     │               │
+    │ name        │───────────────┘
+    └─────────────┘
 ```
+
+### Типы связей в коде
+
+| Тип связи | Реализация в SQLAlchemy | Пример |
+|-----------|------------------------|--------|
+| **1:1** | `relationship(..., uselist=False)` + `unique=True` на FK | `Client.profile` |
+| **1:N** | `ForeignKey` + `relationship()` | `Client.accounts` |
+| **N:M** | Связующая таблица + `secondary=` | `Transaction.categories` |
 
 ---
 
@@ -93,7 +142,7 @@ docker compose down
 | Технология | Версия | Назначение |
 |------------|--------|------------|
 | Python | 3.10+ | Язык программирования |
-| PostgreSQL | 15+ | СУБД |
+| PostgreSQL | 15+ | Реляционная СУБД |
 | SQLAlchemy | 2.0+ | ORM-библиотека |
 | psycopg2 | 2.9+ | Драйвер PostgreSQL |
 | Docker | 20+ | Контейнеризация |
@@ -105,10 +154,10 @@ docker compose down
 
 ### CRUD через ORM
 
-- **Create** — создание клиента и счёта
-- **Read** — фильтрация клиентов по email
-- **Update** — изменение баланса счёта
-- **Delete** — удаление клиента
+- **Create** — создание клиента, профиля (1:1), счёта (1:N), транзакции, категорий и связей (N:M)
+- **Read** — фильтрация клиентов, получение связанных данных через JOIN
+- **Update** — изменение баланса счёта, обновление профиля
+- **Delete** — удаление клиента с каскадным удалением связанных данных
 
 ### Raw SQL
 
@@ -127,13 +176,18 @@ docker compose down
 После запуска вы увидите вывод:
 
 ```
-ORM filter: ['ivanov']
-SQL count: 1
-Done
+app-1  | ORM filter: ['ivanov']
+app-1  | 1:1 relation: ivanov - +79990000000
+app-1  | N:M relation: ['Продукты', 'Транспорт']
+app-1  | SQL count: 2
+app-1  | Done
 ```
 
 Это означает, что:
 - ✅ Подключение к БД успешно
+- ✅ Связь 1:1 работает (клиент → профиль)
+- ✅ Связь 1:N работает (клиент → счета → транзакции)
+- ✅ Связь N:M работает (транзакции ↔ категории)
 - ✅ ORM-запросы работают
 - ✅ Raw SQL-запросы работают
 - ✅ Транзакции обрабатываются
@@ -157,4 +211,30 @@ psql -h localhost -p 5433 -U postgres -d banking_db
 docker compose exec db psql -U postgres -d banking_db
 ```
 
+### Полезные запросы
+
+```sql
+-- Посмотреть все таблицы
+\dt
+
+-- Посмотреть данные клиентов
+SELECT * FROM clients;
+
+-- Проверить связь 1:1
+SELECT c.username, p.phone, p.address 
+FROM clients c 
+JOIN client_profiles p ON c.id = p.client_id;
+
+-- Проверить связь N:M
+SELECT t.amount, c.name as category 
+FROM transactions t
+JOIN transaction_categories tc ON t.id = tc.transaction_id
+JOIN categories c ON tc.category_id = c.id;
+```
+
+---
+
+## 📋 Требования
+
+- Docker и Docker Compose
 ---
