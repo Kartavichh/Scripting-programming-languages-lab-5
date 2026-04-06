@@ -1,0 +1,14 @@
+# Python кэш
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
