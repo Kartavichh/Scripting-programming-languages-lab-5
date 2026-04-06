@@ -29,8 +29,8 @@ lab5/
 
 ### 1. Клонирование репозитория
 
-```bash
-git clone <URL_РЕПОЗИТОРИЯ>
+```bas
+git clone https://github.com/Kartavichh/Scripting-programming-languages-lab-5
 cd lab5
 ```
 
